@@ -68,8 +68,21 @@ volatile unsigned *gpio;
 #define OLED_CONTRASTMASTER 0xC7
 #define OLED_SETVSL         0xB4
 #define OLED_PRECHARGE2     0xB6
-#define OLED_DISPLAYON      0xA5
+#define OLED_DISPLAYON      0xAF
 #define OLED_WRITERAM       0x5C
+
+
+
+
+#define  clk  16
+#define  dout 20
+#define  cs   21
+  unsigned int GPIODat = 0;
+#define  rst 24
+#define  dc  23
+#define  csOled 8
+
+
 
 
 
@@ -79,9 +92,8 @@ void writeData(uint8_t c);
 void writeCommand(uint8_t d);
 
 
-void goToPixel(int x, int y);
-
-
+void fillRectangle(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);
+void drawVerticalLine(uint16_t x, uint16_t y0, uint16_t y1, uint16_t color);
 
 void printButton(int g)
 {
@@ -90,17 +102,16 @@ void printButton(int g)
   else // port is LOW=0V
     printf("Button released!\n");
 }
+
+
+
+
  
 int main(int argc, char **argv)
 {
   int g,rep;
-  int clk  = 16;
-  int dout = 20;
-  int cs   = 21;
-  int pins[4] = {11, 13, 16, 20, 21};
-  unsigned int GPIODat = 0;
-  int rst = 11;
-  int dc = 13;
+
+  int pins[6] = {8, 17, 27, 16, 20, 21};
 
   bool pinDat;
   int ADCRead = 0;
@@ -120,6 +131,11 @@ int main(int argc, char **argv)
       printf("bcm2835_init failed. Are you running as root??\n");
       return 1;
     }
+
+
+
+
+
     if (!bcm2835_spi_begin())
     {
       printf("bcm2835_spi_begin failedg. Are you running as root??\n");
@@ -127,9 +143,9 @@ int main(int argc, char **argv)
     }
     bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);      // The default
     bcm2835_spi_setDataMode(BCM2835_SPI_MODE0);                   // The default
-    bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_1); // The default
-    bcm2835_spi_chipSelect(BCM2835_SPI_CS0);                      // The default
-    bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW);      // the default
+    bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_256); // The default
+    bcm2835_spi_chipSelect(BCM2835_SPI_CS_NONE);                      // The default
+   // bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW);      // the default
 
 
   // Set up gpi pointer for direct register access
@@ -145,14 +161,21 @@ int main(int argc, char **argv)
  \************************************************************************/
  
   // Set GPIO pins 7-11 to output
-  for (g=0; g<5; g++)
+
+
+
+
+  for (g=0; g<6; g++)
   {
     INP_GPIO(pins[g]); // must use INP_GPIO before we can use OUT_GPIO
   }
  OUT_GPIO(clk);
- OUT_GPIO(cs);
+ OUT_GPIO(csOled);
  OUT_GPIO(rst);
  OUT_GPIO(dc);
+
+
+    GPIO_CLR = 1 << csOled;
 
     GPIO_SET = 1 << rst;
     sleep(1);
@@ -161,6 +184,11 @@ int main(int argc, char **argv)
     GPIO_SET = 1 << rst;
     sleep(1);
 
+
+
+
+
+    printf("test");
     // Send a byte to the slave and simultaneously read a byte back from the slave
     // If you tie MISO to MOSI, you should read back what was sent
     writeCommand(OLED_COMMANDLOCK);
@@ -207,8 +235,12 @@ int main(int argc, char **argv)
     writeData(0x01);
     writeCommand(OLED_DISPLAYON);
 
-    goToPixel(30, 30);
 
+    fillRectangle(0, 0, 128, 128, 0x0000);
+    sleep(1);
+    fillRectangle(30, 30, 30, 30, 0xFFFF);
+    drawVerticalLine(30, 20, 100, 0xFF00);
+    printf("Finished\n");
   return 0;
 
 } // main
@@ -249,25 +281,56 @@ void setup_io()
 } // setup_io
 
 
-void goToPixel(int x, int y)
+void fillRectangle(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color)
 {
+	uint16_t i;
 	writeCommand(OLED_SETCOLUMN);
 	writeData(x);
+	writeData(x+w-1);
 	writeCommand(OLED_SETROW);
 	writeData(y);
+	writeData(y+h-1);
 
 	writeCommand(OLED_WRITERAM);
+	for(i=0; i < w*h; i++){
+		writeData(color >> 8);
+		writeData(color);
+	}
 }
+
+
+void drawVerticalLine(uint16_t x, uint16_t y0, uint16_t y1, uint16_t color)
+{
+	uint16_t i;
+	writeCommand(OLED_SETCOLUMN);
+	writeData(x);
+	writeData(x);
+	writeCommand(OLED_SETROW);
+	writeData(y0);
+	writeData(y1);
+
+	writeCommand(OLED_WRITERAM);
+	for(i=0; i < y1-y0; i++){
+		writeData(color >> 8);
+		writeData(color);
+	}
+
+}
+
 
 
 void writeCommand(uint8_t c)
 {
-	GPIO_SET = 1 << dc;
+	GPIO_CLR = 1 << csOled;
+	GPIO_CLR = 1 << dc;
 	bcm2835_spi_transfer(c);
+	GPIO_SET = 1 << csOled;
 }
 
 void writeData(uint8_t d)
 {
-	GPIO_CLR = 1 << dc;
+	GPIO_CLR = 1 << csOled;
+	GPIO_SET = 1 << dc;
 	bcm2835_spi_transfer(d);
+	GPIO_SET = 1 << csOled;
 }
