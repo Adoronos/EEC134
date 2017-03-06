@@ -28,7 +28,7 @@
 #define BLOCK_SIZE (4*1024)
  
 
-#define NUMREADS 1
+#define NUMREADS 4096
 
 
 
@@ -67,6 +67,8 @@ volatile unsigned *gpio;
 #define GPIO_LEV *(gpio+13) 
 
 void setup_io();
+void DelayMicrosecondsNoSleep(int delay_us);
+
  
 void printButton(int g)
 {
@@ -86,14 +88,14 @@ int main(int argc, char **argv)
   unsigned int GPIODat = 0;
   bool pinDat;
   int ADCRead = 0;
-  int data[NUMREADS];
+  volatile int data[NUMREADS + 1];
   struct timespec tsucs, tsucs2;
   tsucs.tv_sec = 0;
   tsucs.tv_nsec = 90;
   struct timespec fftWait, fftWait2;
   fftWait.tv_sec = 0;
   fftWait.tv_nsec = 1000;
-
+  volatile double output[NUMREADS + 1];
 
   int i, j, k, ret, loops, freq, log2_N, jobs, N, mb = mbox_open();
   unsigned t[2];
@@ -101,13 +103,15 @@ int main(int argc, char **argv)
 
   struct GPU_FFT_COMPLEX *base;
   struct GPU_FFT *fft;
-
-
+ 
+  int start;
+  int end;
+  int timeLength;
   jobs = 1;
 
 
     N = 1<<12; // FFT length
-    ret = gpu_fft_prepare(mb, 12, GPU_FFT_REV, 1, &fft); // call once
+    ret = gpu_fft_prepare(mb, 12, GPU_FFT_FWD, 1, &fft); // call once
 
     switch(ret) {
         case -1: printf("Unable to enable V3D. Please check your firmware is up to date.\n"); return -1;
@@ -136,9 +140,13 @@ int main(int argc, char **argv)
   {
     INP_GPIO(pins[g]); // must use INP_GPIO before we can use OUT_GPIO
   }
+
+
+printf("Start\n");
  OUT_GPIO(clk);
  OUT_GPIO(cs);
 
+start = Microseconds();
   for (rep=0; rep<NUMREADS; rep++)
   {
      GPIO_SET = 1 << clk;
@@ -162,6 +170,7 @@ int main(int argc, char **argv)
      }
 
      data[rep] = ADCRead;
+     ADCRead = 0;
      GPIO_SET = 1 << cs;
 
      for (g=0; g<3; g++)
@@ -170,14 +179,25 @@ int main(int argc, char **argv)
       GPIO_CLR = 1 << clk;
      }
 
-     printf("Data: %X\n", data[rep]);
-   }
+
+    // printf("Data: %d %X\n", rep, data[rep]);
+}
+
+
+end = Microseconds();
+timeLength = end-start;
+printf("%d\n", timeLength);
+
+
 
    for (j=0; j<jobs; j++) {
         base = fft->in + j*fft->step; // input buffer
-        for (i=0; i<N; i++) base[i].re = base[i].im = 0;
-            freq = j+1;
-            base[freq].re = base[N-freq].re = 0.5;
+        for (i=0; i<N; i++)
+	{
+	    base[i].re = base[i].im = 0;
+            base[i].re = data[i];
+	   // printf("Val: %d %f %f\n", i, base[i].re, base[i].im);
+	}
    }
 
     nanosleep(&fftWait, &fftWait2); // Yield to OS
@@ -185,22 +205,27 @@ int main(int argc, char **argv)
     gpu_fft_execute(fft); // call one or many times
     t[1] = Microseconds();
 
+
+
     tsq[0]=tsq[1]=0;
     for (j=0; j<jobs; j++) {
         base = fft->out + j*fft->step; // output buffer
         freq = j+1;
         for (i=0; i<N; i++) {
-            double re = cos(2*GPU_FFT_PI*freq*i/N);
-            tsq[0] += pow(re, 2);
-            tsq[1] += pow(re - base[i].re, 2) + pow(base[i].im, 2);
+            output[i] = pow(base[i].re, 2) + pow(base[i].im, 2);
+	   // printf("FFT: %f\n", output);
         }
     }
+
+
 
     printf("rel_rms_err = %0.2g, usecs = %d, k = %d\n",
             sqrt(tsq[1]/tsq[0]), (t[1]-t[0])/jobs, k);
 
+
     gpu_fft_release(fft); // Videocore memory lost if not freed !
 
+ 
   return 0;
 
 } // main
@@ -239,3 +264,28 @@ void setup_io()
  
  
 } // setup_io
+
+
+/*
+void DelayMicrosecondsNoSleep(int delay_us)
+{
+   long int start_time;
+   long int time_difference;
+   struct timespec gettime_now;
+
+   clock_gettime(CLOCK_REALTIME, &gettime_now);
+   start_time = gettime_now.tv_nsec;
+   while (1)
+   {
+	clock_gettime(CLOCK_REALTIME, &gettime_now);
+	time_difference = gettime_now.tv_nsec - start_time;
+	if (time_difference < 0)
+		time_difference += 1000000000;
+	if (time_difference > (delay_us * 1000))
+		break;
+
+   }
+
+
+}
+*/

@@ -40,6 +40,20 @@ int main(int argc, char **argv)
     
     // Send a byte to the slave and simultaneously read a byte back from the slave
     // If you tie MISO to MOSI, you should read back what was sent
+    bcm2835_spi_transfer(OLED_COMMANDLOCK);
+    bcm2835_spi_transfer(0x12);
+    bcm2835_spi_transfer(OLED_COMMANDLOCK);
+    bcm2835_spi_transfer(0xB1);
+    bcm2835_spi_transfer(OLED_DISPLAY_OFF);
+    bcm2835_spi_transfer(OLED_CLOCKDIV);
+    bcm2835_spi_transfer(0xF1);
+    bcm2835_spi_transfer(OLED_MUXRATE);
+    bcm2835_spi_transfer(127);
+    bcm2835_spi_transfer(OLED_SETREMAP);
+    bcm2835_spi_transfer(0x74);
+
+
+
     uint8_t send_data = 0x00;
     uint8_t send_data2 = 0x00;
     uint8_t read_data = bcm2835_spi_transfer(send_data);
