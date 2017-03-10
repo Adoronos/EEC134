@@ -40,8 +40,10 @@ int main(int argc, char **argv)
     
     // Send a byte to the slave and simultaneously read a byte back from the slave
     // If you tie MISO to MOSI, you should read back what was sent
-    uint8_t send_data = 0x00;
-    uint8_t send_data2 = 0x00;
+
+
+    uint8_t send_data = 0x01;
+    uint8_t send_data2 = 0x05;
     uint8_t read_data = bcm2835_spi_transfer(send_data);
     uint8_t read_data2 = bcm2835_spi_transfer(send_data2);
     printf("Sent to SPI: 0x%02X. Read back from SPI: 0x%02X.  0x%02X\n", send_data, read_data, read_data2);

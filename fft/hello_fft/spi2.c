@@ -24,7 +24,7 @@
 #define BLOCK_SIZE (4*1024)
  
 
-#define NUMREADS 1
+#define NUMREADS 10
 
 
 
@@ -73,7 +73,9 @@ int main(int argc, char **argv)
   struct timespec tsucs, tsucs2;
   tsucs.tv_sec = 0;
   tsucs.tv_nsec = 90;
-
+  struct timespec adcwait, adcwait2;
+  adcwait.tv_sec = 0;
+  adcwait.tv_nsec = 33333;
 
 
   // Set up gpi pointer for direct register access
@@ -93,6 +95,7 @@ int main(int argc, char **argv)
   {
     INP_GPIO(pins[g]); // must use INP_GPIO before we can use OUT_GPIO
   }
+
  OUT_GPIO(clk);
  OUT_GPIO(cs);
 
@@ -119,13 +122,16 @@ int main(int argc, char **argv)
      }
 
      data[rep] = ADCRead;
+     ADCRead = 0;
      GPIO_SET = 1 << cs;
 
-     for (g=0; g<3; g++)
+     for (g=0; g<4; g++)
      {
       GPIO_SET = 1 << clk;
       GPIO_CLR = 1 << clk;
      }
+
+  nanosleep(&adcwait, &adcwait2); 
 
    printf("Data: %X\n", data[rep]);
 }

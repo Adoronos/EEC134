@@ -24,7 +24,7 @@
 #define BLOCK_SIZE (4*1024)
  
 
-#define NUMREADS 1
+#define NUMREADS 100
 
 
 
